@@ -99,7 +99,7 @@ class atThread(QtCore.QThread):
         patten = re.compile(rule)
         apiToolPid = string.atoi(patten.findall(result)[1])
         p = psutil.Process(apiToolPid)
-        print "subprocess id is %d" % apiToolPid
+        #print "subprocess id is %d" % apiToolPid
         while True:
             percentage = p.cpu_percent(interval=1.0)
             print "the cpu percentage is %f" % percentage
@@ -118,7 +118,7 @@ class atThread(QtCore.QThread):
         time.sleep(10)
         os.chdir(os.path.dirname(self.apiReportToolDirecotry))
         Mhandle = win32gui.FindWindow("TkTopLevel", r"SAT 400UE API Report Tool")
-        print "%x" % (Mhandle) 
+        #print "%x" % (Mhandle) 
         #set the window to the top level
         #win32gui.ShowWindow(Mhandle,win32con.SW_RESTORE)
         #shell = win32com.client.Dispatch("WScript.Shell")
@@ -126,12 +126,12 @@ class atThread(QtCore.QThread):
         #win32gui.SetForegroundWindow(Mhandle)
         
         logDirecotyHandle = self.find_subHandle(Mhandle, [("TkChild", 0),("TkChild", 4),("TkChild", 0),])  
-        print "logDirecotyHandle %x" % (logDirecotyHandle)
+        #print "logDirecotyHandle %x" % (logDirecotyHandle)
         # click the log directory edit line and input the path
         self.moveMouseAndClick(Mhandle,logDirecotyHandle)
         time.sleep(2)
         dirList = self.convertedMmtDirectory.split(":")
-        print  dirList[0]
+       #print  dirList[0]
         time.sleep(1)
         autopy.key.type_string(dirList[0])
         autopy.key.toggle(autopy.key.K_SHIFT,True)
@@ -139,27 +139,27 @@ class atThread(QtCore.QThread):
         time.sleep(1)
         autopy.key.toggle(autopy.key.K_SHIFT,False)
         autopy.key.type_string(dirList[1])
-        print  dirList[1]
+       # print  dirList[1]
         time.sleep(2)
         #click the generate CVS button and wait for the finish of decode 
         generateCvsLogHandle = self.find_subHandle(Mhandle, [("TkChild", 0),("TkChild", 3),("Button",0)])  
-        print "generateCvsLogHandle %x" % (generateCvsLogHandle) 
+        #print "generateCvsLogHandle %x" % (generateCvsLogHandle) 
         self.moveMouseAndClick(Mhandle,generateCvsLogHandle)
         time.sleep(3)
         self.judgeTheCpuUsageRate(self.apiReportToolDirecotry)
         # get all the handles of the other elements in API report tool
         generalReportHandle = self.find_subHandle(Mhandle, [("TkChild", 0),("TkChild", 0),("Button",0)])  
-        print "generalReportHandle %x" % (generalReportHandle)  
+        #print "generalReportHandle %x" % (generalReportHandle)  
         specificReportHandle = self.find_subHandle(Mhandle, [("TkChild", 0),("TkChild", 1),("Button",0)])  
-        print "specificReportHandle %x" % (specificReportHandle) 
+        #print "specificReportHandle %x" % (specificReportHandle) 
         sectorIdHandle = self.find_subHandle(Mhandle, [("TkChild", 0),("TkChild", 2),("TkChild", 3),("TkChild", 0)])  
-        print "sectorIdHandle %x" % (sectorIdHandle) 
+        #print "sectorIdHandle %x" % (sectorIdHandle) 
         carrierIdHandle = self.find_subHandle(Mhandle, [("TkChild", 0),("TkChild", 2),("TkChild", 2),("TkChild", 0)])  
-        print "carrierIdHandle %x" % (carrierIdHandle)
+        #print "carrierIdHandle %x" % (carrierIdHandle)
         apiIdHandle = self.find_subHandle(Mhandle, [("TkChild", 0),("TkChild", 2),("TkChild", 1),("TkChild", 0)])  
-        print "apiIdHandle %x" % (apiIdHandle)
+        #print "apiIdHandle %x" % (apiIdHandle)
         itemNameHandle = self.find_subHandle(Mhandle, [("TkChild", 0),("TkChild", 2),("TkChild", 0),("TkChild", 0)])  
-        print "itemNameHandle %x" % (itemNameHandle)
+        #print "itemNameHandle %x" % (itemNameHandle)
         # if api and itemName is empty, only generate the general report, else both report 
         if self.api != "" and self.itemName != "":
             #generate specific report, all edits will be filled
@@ -216,6 +216,8 @@ class killProcessThread(QtCore.QThread):
         self.processName = process
     
     def run(self):
+        global akButtonClicked
+        
         currentTime = datetime.now()
         #print currentTime
         # add judgement here to sure the end time is ahead of the current time 
@@ -226,14 +228,18 @@ class killProcessThread(QtCore.QThread):
 
         for each in exeList:
             wordList = each.split('.')
-            if wordList == '':
-                continue
+            print 'the killed process name is %s' % (wordList[0])
+            if wordList[0] == '':
+                break
             cmd = 'taskkill /F /IM %s.exe' % (wordList[0])
             time.sleep(1)
             os.system(cmd)
             self.processList.append(wordList[0])
-        self.finishSignal.emit(self.processList)
-        self.finishSignalForAt.emit()
+        if akButtonClicked==1:  
+            self.finishSignal.emit(self.processList)
+        else:   
+            self.finishSignal.emit(self.processList)
+            self.finishSignalForAt.emit()
 
 class killer(QDialog, Ui_akat):
     """
@@ -250,7 +256,7 @@ class killer(QDialog, Ui_akat):
         """
         QDialog.__init__(self, parent)
         self.setupUi(self)
-        self.setFixedSize(851, 424)
+        self.setFixedSize(820, 458)
         self.kThread = killProcessThread()
         self.aThread = atThread()
         self.apiThread = startApiReportToolThread()
@@ -270,9 +276,8 @@ class killer(QDialog, Ui_akat):
         """
         Kill the process by name.
         """
-        self.pushButton_start.setDisabled(True)
-        self.flagKilling = 1
-        
+        global  akButtonClicked
+        akButtonClicked = 1        
         endDate = self.dateTimeEdit_end.date()
         yy = endDate.year()
         mm = endDate.month()
@@ -284,20 +289,76 @@ class killer(QDialog, Ui_akat):
         expectedEndTime = datetime(yy, mm, dd, hh, min, ss, 0)
         #print expectedEndTime
         processName = self.lineEdit_processName.text()
-        self.paraForSubThread.emit(expectedEndTime, processName)
-        self.kThread.start()    
-        
+        if str(processName) =='':
+            QtGui.QMessageBox.information(self, "INFO", 'Please input the process name you want to kill')
+            return
+        else:
+            currentTime = datetime.now()
+            if currentTime > expectedEndTime:
+                QtGui.QMessageBox.information(self, "INFO", 'Make sure the end time is after current time')
+                return
+            else:
+                self.pushButton_start.setDisabled(True)
+                self.pushButton_akatStart.setDisabled(True)
+                self.pushButton_akatStop.setDisabled(True)
+                self.paraForSubThread.emit(expectedEndTime, processName)
+                self.flagKilling = 1
+                self.kThread.start()    
+
+    def akThreadStartForAT(self):
+        """
+        Kill the process by name.
+        """
+        global  akButtonClicked
+        akButtonClicked = 0
+        endDate = self.dateTimeEdit_end.date()
+        yy = endDate.year()
+        mm = endDate.month()
+        dd = endDate.day()
+        endTime = self.dateTimeEdit_end.time()
+        hh = endTime.hour()
+        min = endTime.minute()
+        ss = endTime.second()
+        expectedEndTime = datetime(yy, mm, dd, hh, min, ss, 0)
+        #print expectedEndTime
+        processName = self.lineEdit_processName.text()
+        if str(processName) =='':
+            QtGui.QMessageBox.information(self, "INFO", 'Please input the process name you want to kill')
+            return 1
+            #self.pushButton_akatStop.setDisabled(False)
+        else:
+            currentTime = datetime.now()
+            if currentTime > expectedEndTime:
+                QtGui.QMessageBox.information(self, "INFO", 'Make sure the end time is after current time')
+                return 1
+                #self.pushButton_akatStop.setDisabled(False)
+            else:
+                self.pushButton_start.setDisabled(True)
+                self.flagKilling = 1
+                self.paraForSubThread.emit(expectedEndTime, processName)
+                self.kThread.start()  
+                return 0
     def subThreadWorkEndAll(self, processList):
         '''
         after the killing thread work end, will send signal to main thread, and main thread will popup msg box to notify user
         '''
-        self.pushButton_start.setDisabled(False)
+        
         self.flagKilling = 0
+        global akButtonClicked
+        #print 'the length of the list is %d' % len(processList)
         if len(processList) == 0:
             QtGui.QMessageBox.information(self, "INFO", 'No process will be terminated!!')
+            if akButtonClicked == 1 :
+                self.pushButton_akatStart.setDisabled(False)
+                self.pushButton_akatStop.setDisabled(False)
+            return
         else:
             for each in processList:
                 QtGui.QMessageBox.information(self, "INFO", 'Process %s is Terminated' %(each))
+            if akButtonClicked == 1:
+                self.pushButton_akatStart.setDisabled(False)
+                self.pushButton_akatStop.setDisabled(False)
+                self.pushButton_start.setDisabled(False)
         #subprocess.call(r"D:\Work\AutoKiller\api_report_tool_v2.3\api_report_ui.exe")
         
     @pyqtSignature("")
@@ -309,10 +370,26 @@ class killer(QDialog, Ui_akat):
             self.kThread.terminate()
             self.pushButton_start.setDisabled(False)
             self.flagKilling = 0
+            self.pushButton_akatStart.setDisabled(False)
+            self.pushButton_akatStop.setDisabled(False)
+    @pyqtSignature("")       
     def on_pushButton_akatStart_clicked(self):
-        self.on_pushButton_start_clicked()
-        self.pushButton_akatStart.setDisabled(True)
-        self.pushButton_stop.setDisabled(True)
+        startN = str(self.lineEdit_from.text())
+        endN = str(self.lineEdit_to.text())
+        carrierId = str(self.lineEdit_carrierID.text())
+        sectorId = str(self.lineEdit_sectorID.text())
+        mmtDirectory = str(self.lineEdit_mmtDirectory.text())
+        apiReportToolDirectory =str(self.lineEdit_apiReportToolDirectory.text())
+        #apiReportToolDirectory = str(apiReportToolDirectory)
+        if startN=='' or endN =='' or carrierId =='' or sectorId=='' or mmtDirectory=='' or apiReportToolDirectory =='':
+            QtGui.QMessageBox.information(self, "INFO", 'Must fill all Line edit expect the api and itemName!!')
+            return
+        else:
+            self.pushButton_akatStart.setDisabled(True)
+            self.pushButton_stop.setDisabled(True)
+            if  self.akThreadStartForAT() ==1:
+                self.pushButton_akatStart.setDisabled(False)
+                self.pushButton_stop.setDisabled(False)
     
     def akFinishedToStartAT(self):
         '''
@@ -322,7 +399,7 @@ class killer(QDialog, Ui_akat):
         '''
         paraList = []
         startN = str(self.lineEdit_from.text())
-        print type(startN)
+        #print type(startN)
         endN = str(self.lineEdit_to.text())
         fromNumber = string.atoi(startN)
         toNumber = string.atoi(endN)
@@ -336,7 +413,7 @@ class killer(QDialog, Ui_akat):
         paraList.append(str(itemName))
         mmtDirectory = self.lineEdit_mmtDirectory.text()
         convertedMmtDirectory = os.path.join(str(mmtDirectory),'convertedMMT')
-        print  convertedMmtDirectory
+        #print  convertedMmtDirectory
         paraList.append(convertedMmtDirectory)
         apiReportToolDirectory =self.lineEdit_apiReportToolDirectory.text()
         apiReportToolDirectory = str(apiReportToolDirectory)
@@ -344,7 +421,7 @@ class killer(QDialog, Ui_akat):
         if not os.path.exists(convertedMmtDirectory):
             os.mkdir(convertedMmtDirectory)
         fileList = os.listdir(mmtDirectory)
-        print fileList
+        #print fileList
         for i in range(fromNumber,toNumber+1):
             if i<10:
                 rule = '.+_0000%s_.+'%(i)
@@ -363,9 +440,9 @@ class killer(QDialog, Ui_akat):
         #copy csv files from api report tool to current dir
         apiDirPath = os.path.dirname(apiReportToolDirectory)
         filesInApiToolPath = os.listdir(apiDirPath)
-        print filesInApiToolPath
+        #print filesInApiToolPath
         currentDir = os.getcwd()
-        print currentDir
+        #print currentDir
         rule = '.+\.csv'
         for eachfile in filesInApiToolPath:
             if re.search(rule, eachfile):
@@ -391,20 +468,21 @@ class killer(QDialog, Ui_akat):
         after decode thread finished, the main thread will kill the api report tool
         '''
         cmd = 'taskkill /F /IM %s' % (os.path.basename(str(self.lineEdit_apiReportToolDirectory.text())))
-        print cmd
+        #print cmd
         time.sleep(1)
         os.system(cmd)
         self.pushButton_akatStart.setDisabled(False)
         self.pushButton_stop.setDisabled(False)
-        
+    @pyqtSignature("")    
     def on_pushButton_akatStop_clicked(self):
         if self.kThread.isRunning():
             self.kThread.terminate()
-            self.pushButton_start.setDisabled(False)
+        self.pushButton_start.setDisabled(False)
+        self.pushButton_stop.setDisabled(False)
             
         if self.aThread.isRunning():
             self.aThread.terminate()
-            self.pushButton_akatStart.setDisabled(False)
+        self.pushButton_akatStart.setDisabled(False)    
         
         
 if __name__ == "__main__":

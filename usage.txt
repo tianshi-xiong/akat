@@ -1,0 +1,11 @@
+'''
+welcome to use this tool
+'''
+
+How to use:
+1. to kill the processes you want, need to check the process name in "Windows Task Manager", then fill them in the line edit, split with ",", ".exe" isn't mandatory
+2. The time to kill shoul be after the current time
+3. MMT directory is dir that including raw mmt files
+4. from and to, are the mmt numbers you want to decode
+5. "api report tool dir" should include the exe file
+6. remain fileds following your requirements 

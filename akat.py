@@ -32,6 +32,7 @@ class startApiReportToolThread(QtCore.QThread):
         
 class atThread(QtCore.QThread):
     finishSignal = QtCore.pyqtSignal()
+    foregroundSignal = QtCore.pyqtSignal()
     def __init__(self, parent=None):
         super(atThread, self).__init__(parent)
         self.carrierId= ''
@@ -72,12 +73,10 @@ class atThread(QtCore.QThread):
             
     def moveMouseAndClick(self, parentWH,subWH):
         #restore  the api report tool if it is minimized, seems better to judge if it is minimized firstly
-        win32gui.ShowWindow(parentWH,win32con.SW_RESTORE)
-        #need to initialize firstly in sub thread.
-        pythoncom.CoInitialize()
-        shell = win32com.client.Dispatch("WScript.Shell")
-        shell.SendKeys('%')
-        win32gui.SetForegroundWindow(parentWH)
+        #win32gui.ShowWindow(parentWH,win32con.SW_RESTORE)
+        #need to initialize firstly in sub thread. set the api tool to the foreground, emit signal to let main thread make the api tool to foreground.
+        self.foregroundSignal.emit()
+        time.sleep(3)
         #win32gui.SetWindowPos(parentWH, win32con.HWND_TOPMOST, 0,0,0,0, win32con.SWP_NOMOVE | win32con.SWP_NOACTIVATE| win32con.SWP_NOOWNERZORDER|win32con.SWP_SHOWWINDOW)
         rect = win32gui.GetWindowRect(subWH)
         x = rect[0]
@@ -113,7 +112,12 @@ class atThread(QtCore.QThread):
                 if percentage < 5:
                     #print r"the cpu percentage is less than 10%"
                     break
-     
+    def inputUnderLine(self):
+        autopy.key.toggle(autopy.key.K_SHIFT,True)
+        autopy.key.type_string("_")
+        time.sleep(1)
+        autopy.key.toggle(autopy.key.K_SHIFT,False) 
+        
     def run(self):
         time.sleep(10)
         os.chdir(os.path.dirname(self.apiReportToolDirecotry))
@@ -134,11 +138,35 @@ class atThread(QtCore.QThread):
        #print  dirList[0]
         time.sleep(1)
         autopy.key.type_string(dirList[0])
+        #if there is ":" and "_" in direcotry, need to input them separately
         autopy.key.toggle(autopy.key.K_SHIFT,True)
         autopy.key.type_string(":")
         time.sleep(1)
         autopy.key.toggle(autopy.key.K_SHIFT,False)
-        autopy.key.type_string(dirList[1])
+        #if there are "_" in file name need to input them separately 
+        #autopy.key.type_string("\\")
+        strList = dirList[1].split("\\")
+        rule = "_"
+        for each in strList:
+            #if re.match(rule, each):
+            #    self.inputUnderLine()
+            if re.search(rule, each):
+                wdList = each.split("_")
+                #print wdList
+                #print len(wdList)
+                for i in range(len(wdList)):
+                    autopy.key.type_string(wdList[i])
+                    #print i, 
+                    if i == (len(wdList)-1) and wdList[i] == '':
+                        break
+                    else:
+                        if i ==(len(wdList)-1):
+                            break
+                        self.inputUnderLine()
+            else:
+                autopy.key.type_string(each)
+            autopy.key.type_string("\\")
+        #autopy.key.type_string(dirList[1])
        # print  dirList[1]
         time.sleep(2)
         #click the generate CVS button and wait for the finish of decode 
@@ -262,6 +290,7 @@ class killer(QDialog, Ui_akat):
         self.apiThread = startApiReportToolThread()
         
         self.aThread.finishSignal.connect(self.atThreadFinished)
+        self.aThread.foregroundSignal.connect(self.makeForeGround)
         self.kThread.finishSignal.connect(self.subThreadWorkEndAll)
         self.kThread.finishSignalForAt.connect(self.akFinishedToStartAT)
         self.paraForSubThread.connect(self.kThread.initValues)
@@ -442,8 +471,13 @@ class killer(QDialog, Ui_akat):
         filesInApiToolPath = os.listdir(apiDirPath)
         #print filesInApiToolPath
         currentDir = os.getcwd()
-        #print currentDir
+        #remove all the csv files in current dir 
         rule = '.+\.csv'
+        filesInCurDir = os.listdir(currentDir)
+        for eachfile in filesInCurDir:
+            if re.search(rule, eachfile):
+               os.remove(os.path.join(str(currentDir), eachfile)) 
+        #print currentDir
         for eachfile in filesInApiToolPath:
             if re.search(rule, eachfile):
                 shutil.copy(os.path.join(str(apiDirPath), eachfile),currentDir)
@@ -473,6 +507,7 @@ class killer(QDialog, Ui_akat):
         os.system(cmd)
         self.pushButton_akatStart.setDisabled(False)
         self.pushButton_stop.setDisabled(False)
+        self.pushButton_start.setDisabled(False)
     @pyqtSignature("")    
     def on_pushButton_akatStop_clicked(self):
         if self.kThread.isRunning():
@@ -484,6 +519,12 @@ class killer(QDialog, Ui_akat):
             self.aThread.terminate()
         self.pushButton_akatStart.setDisabled(False)    
         
+    def makeForeGround(self):
+        Mhandle = win32gui.FindWindow("TkTopLevel", r"SAT 400UE API Report Tool")
+        pythoncom.CoInitialize()
+        shell = win32com.client.Dispatch("WScript.Shell")
+        shell.SendKeys('%')
+        win32gui.SetForegroundWindow(Mhandle)
         
 if __name__ == "__main__":
     import sys

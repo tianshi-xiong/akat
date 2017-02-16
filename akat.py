@@ -16,10 +16,306 @@ import re, string
 import autopy
 import win32com.client, pythoncom
 import win32gui
-import win32con, win32com
 
 akButtonClicked = 0
 
+
+def dealPath(pathname=''):
+    '''deal with windows file path'''
+    if pathname:
+        pathname = str(pathname).strip()
+    if pathname:
+        pathname = r'%s'%pathname
+        pathname = string.replace(pathname, r'/', '\\')
+        pathname = os.path.abspath(pathname)
+        if pathname.find(":\\") == -1:
+            pathname = os.path.join(os.getcwd(), pathname)
+    return pathname
+#The excel operation class:
+class EasyExcel(object):
+    '''class of easy to deal with excel'''
+
+    def __init__(self):
+        '''initial excel application'''
+        self.m_filename = ''
+        self.m_exists = False
+        self.m_excel = win32com.client.DispatchEx('Excel.Application') #也可以用Dispatch，前者开启新进程，后者会复用进程中的excel进程
+        self.m_excel.DisplayAlerts = False                             #覆盖同名文件时不弹出确认框
+        
+    def open(self, filename=''):
+        '''open excel file'''
+        if getattr(self, 'm_book', False):
+            self.m_book.Close()
+        self.m_filename = dealPath(filename) or ''
+        self.m_exists = os.path.isfile(self.m_filename)
+        if not self.m_filename or not self.m_exists:
+            self.m_book = self.m_excel.Workbooks.Add()
+        else:
+            self.m_book = self.m_excel.Workbooks.Open(self.m_filename)
+
+    def reset(self):
+        '''reset'''
+        self.m_excel = None
+        self.m_book = None
+        self.m_filename = ''
+
+    def save(self, newfile=''):
+        '''save the excel content'''
+        assert type(newfile) is str, 'filename must be type string'
+        newfile = dealPath(newfile) or self.m_filename
+        if not newfile or (self.m_exists and newfile == self.m_filename):
+            self.m_book.Save()
+            return
+        pathname = os.path.dirname(newfile)
+        if not os.path.isdir(pathname):
+            os.makedirs(pathname)
+        self.m_filename = newfile
+        self.m_book.SaveAs(newfile)
+
+    def close(self):
+        '''close the application'''
+        self.m_book.Close(SaveChanges=1)
+        self.m_excel.Quit()
+        time.sleep(2)
+        self.reset()
+
+    def addSheet(self, sheetname=None):
+        '''add new sheet, the name of sheet can be modify,but the workbook can't '''
+        #print ' in Add sheet'
+        sht = self.m_book.Worksheets.Add()
+        sht.Name = sheetname if sheetname else sht.Name
+        return sht
+
+    def getSheet(self, sheet=1):
+        '''get the sheet object by the sheet index'''
+        #print 'in get sheet'
+        assert sheet > 0, 'the sheet index must bigger then 0'
+        return self.m_book.Worksheets(sheet)
+
+    def getSheetByName(self, name):
+        '''get the sheet object by the sheet name'''
+        #print 'the sheet count is %d'%(self.getSheetCount())
+        for i in xrange(1, self.getSheetCount()+1):
+            sheet = self.getSheet(i)
+            if name == sheet.Name:
+                print 'the name is %s'%(sheet.Name)
+                return i
+        return None
+
+    def getCell(self, sheet=1, row=1, col=1):
+        '''get the cell object'''
+        assert row>0 and col>0, 'the row and column index must bigger then 0'
+        return self.getSheet(sheet).Cells(row, col)
+
+    def getRow(self, sheet=1, row=1):
+        '''get the row object'''
+        #print 'in get Row'
+        assert row>0, 'the row index must bigger then 0'
+        return self.getSheet(sheet).Rows(row)
+
+    def getCol(self, sheet, col):
+        '''get the column object'''
+        assert col>0, 'the column index must bigger then 0'
+        return self.getSheet(sheet).Columns(col)
+
+    def getRange(self, sheet, row1, col1, row2, col2):
+        '''get the range object'''
+        sht = self.getSheet(sheet)
+        return sht.Range(self.getCell(sheet, row1, col1), self.getCell(sheet, row2, col2))
+
+    def getCellValue(self, sheet, row, col):
+        '''Get value of one cell'''
+        return self.getCell(sheet,row, col).Value
+
+    def setCellValue(self, sheet, row, col, value):
+        '''set value of one cell'''
+        #print 'in set Cell value'
+        self.getCell(sheet, row, col).Value = value
+
+    def getRowValue(self, sheet, row):
+        '''get the row values'''
+        #print 'in get row value'
+        return self.getRow(sheet, row).Value
+
+    def setRowValue(self, sheet, row, values):
+        '''set the row values'''
+        #print 'in SetRowValue'
+        self.getRow(sheet, row).Value = values
+
+    def getColValue(self, sheet, col):
+        '''get the row values'''
+        #print 'in getColValue'
+        return self.getCol(sheet, col).Value
+
+    def setColValue(self, sheet, col, values):
+        '''set the row values'''
+        #print 'in setColValue'
+        self.getCol(sheet, col).Value = values
+
+    def getRangeValue(self, sheet, row1, col1, row2, col2):
+        '''return a tuples of tuple)'''
+        return self.getRange(sheet, row1, col1, row2, col2).Value
+
+    def setRangeValue(self, sheet, row1, col1, data):
+        '''set the range values'''
+        row2 = row1 + len(data) - 1
+        col2 = col1 + len(data[0]) - 1
+        range = self.getRange(sheet, row1, col1, row2, col2)
+        range.Clear()
+        range.Value = data
+
+    def getSheetCount(self):
+        '''get the number of sheet'''
+        return self.m_book.Worksheets.Count
+
+    def getMaxRow(self, sheet):
+        '''get the max row number, not the count of used row number'''
+        return self.getSheet(sheet).Rows.Count
+
+    def getMaxCol(self, sheet):
+        '''get the max col number, not the count of used col number'''
+        return self.getSheet(sheet).Columns.Count
+
+    def clearCell(self, sheet, row, col):
+        '''clear the content of the cell'''
+        self.getCell(sheet,row,col).Clear()
+
+    def deleteCell(self, sheet, row, col):
+        '''delete the cell'''
+        self.getCell(sheet, row, col).Delete()
+
+    def clearRow(self, sheet, row):
+        '''clear the content of the row'''
+        self.getRow(sheet, row).Clear()
+
+    def deleteRow(self, sheet, row):
+        '''delete the row'''
+        self.getRow(sheet, row).Delete()
+
+    def clearCol(self, sheet, col):
+        '''clear the col'''
+        self.getCol(sheet, col).Clear()
+
+    def deleteCol(self, sheet, col):
+        '''delete the col'''
+        self.getCol(sheet, col).Delete()
+
+    def clearSheet(self, sheet):
+        '''clear the hole sheet'''
+        self.getSheet(sheet).Clear()
+
+    def deleteSheet(self, sheet):
+        '''delete the hole sheet'''
+        #print 'in delete sheet'
+        self.getSheet(sheet).Delete()
+
+    def deleteRows(self, sheet, fromRow, count=1):
+        '''delete count rows of the sheet'''
+        maxRow = self.getMaxRow(sheet)
+        maxCol = self.getMaxCol(sheet)
+        endRow = fromRow+count-1
+        if fromRow > maxRow or endRow < 1:
+            return
+        self.getRange(sheet, fromRow, 1, endRow, maxCol).Delete()
+
+    def deleteCols(self, sheet, fromCol, count=1):
+        '''delete count cols of the sheet'''
+        maxRow = self.getMaxRow(sheet)
+        maxCol = self.getMaxCol(sheet)
+        endCol = fromCol + count - 1
+        if fromCol > maxCol or endCol < 1:
+            return
+        self.getRange(sheet, 1, fromCol, maxRow, endCol).Delete()
+
+class copyDataAndGraphThread(QtCore.QThread):
+    copyFinishSignal = QtCore.pyqtSignal()
+    def __init__(self, parent=None):
+        super(copyDataAndGraphThread, self).__init__(parent)
+    def initValues(self, sourceFilePath, targetExcelPath, name, cellid):
+        self.sourceExcelFilePath = sourceFilePath
+        self.targetExcelFile = targetExcelPath
+        self.graphName = name
+        self.CellId = cellid
+    def run(self):
+        excelRd = EasyExcel()
+        #print self.sourceExcelFilePath, self.targetExcelFile, self.graphName, self.CellId
+        sourceFileName = os.path.join(str(self.sourceExcelFilePath), (r'general_report_cell'+str(self.CellId)+r'.xlsx'))
+        print 'the sourceFileName is %s'%(sourceFileName)
+        excelRd.open(sourceFileName)
+
+        generalSheet = excelRd.getSheetByName(r'general')
+        aveDataRateSheet = excelRd.getSheetByName(r'aveDataRate')
+        pathlossSheet = excelRd.getSheetByName(r'pathloss')
+        cqiSheet = excelRd.getSheetByName(r'cqi')
+        #sourceContent = excelRd.getRangeValue(generalSheet,1,1,240,61)
+       
+        targetFileName = self.targetExcelFile
+        excelWt = EasyExcel()
+        excelWt.open(targetFileName)
+
+        #copy the summary sheet
+        sheetSummary= excelWt.getSheetByName('Summary')
+        if not sheetSummary:
+            count =excelWt.getSheetCount()
+            currentSheet = excelWt.getSheet(count)
+            currentSheet.Select
+            currentSheet.Activate()
+            excelWt.addSheet('Summary')
+            sheetSummary = excelWt.getSheetByName('Summary')
+        else:
+            excelWt.deleteSheet(sheetSummary)
+            count =excelWt.getSheetCount()
+            currentSheet = excelWt.getSheet(count)
+            currentSheet.Select
+            currentSheet.Activate()
+            excelWt.addSheet('Summary')
+            sheetSummary = excelWt.getSheetByName('Summary')
+        for i in range(1,19):
+            data = excelRd.getRowValue(aveDataRateSheet,i)
+            excelWt.setRowValue(sheetSummary,i,data)
+        
+        #copy the pathloss data
+        pathlossData = excelRd.getColValue(pathlossSheet,2)
+        excelWt.setColValue(sheetSummary,8,pathlossData)
+        #copy the cqi data
+        cqiData = excelRd.getColValue(cqiSheet,2)
+        excelWt.setColValue(sheetSummary,9,cqiData)
+    
+        #copy the general sheet
+        sheetData= excelWt.getSheetByName('Data')
+        if not sheetData:
+            excelWt.addSheet('Data')
+            sheetData = excelWt.getSheetByName('Data')
+        else:
+            excelWt.deleteSheet(sheetData)
+            excelWt.addSheet('Data')
+            sheetData = excelWt.getSheetByName('Data')
+        for i in range(1,241):
+            data = excelRd.getRowValue(generalSheet,i)
+            excelWt.setRowValue(sheetData,i,data)
+        #Set the graph name
+        graphName = str(self.graphName)
+        excelWt.setCellValue(9,1,11,graphName)
+    
+        savedFileName = os.path.join(str(self.sourceExcelFilePath),r'CompareResult.xlsm')
+        print 'the saved file name is %s'%(savedFileName)
+        excelWt.save(savedFileName)
+        excelWt.close()
+        excelRd.close()
+        
+        #run the copy macro 
+        xl=win32com.client.Dispatch("Excel.Application")
+        mb = xl.Workbooks.Open(Filename=savedFileName)
+        xl.Application.Run("Copy")
+        time.sleep(40)
+        xl.Application.Save()
+        mb.Save()
+        mb.Close(SaveChanges=1)
+        xl.Application.Quit()
+        del xl
+        self.copyFinishSignal.emit()
+
+#Class used to start api report tool 
 class startApiReportToolThread(QtCore.QThread):
     def __init__(self, parent=None):
         super(startApiReportToolThread, self).__init__(parent)
@@ -27,9 +323,14 @@ class startApiReportToolThread(QtCore.QThread):
     def initValues(self, apiToolPath):
          self.apiReportToolDirecotry = str(apiToolPath)
     def run(self):
+        #kill the api tool firstly, if it is in open status
+        cmd = 'taskkill /F /IM %s' % (os.path.basename(str(self.apiReportToolDirecotry)))
+        os.system(cmd)
+        time.sleep(1)
         #self.apiReportToolDirecotry = os.path.join(str(self.apiReportToolDirecotry),r'api_report_ui_2.2.exe')
         os.system(self.apiReportToolDirecotry)
-        
+
+#class used to automatically transform the MMT log        
 class atThread(QtCore.QThread):
     finishSignal = QtCore.pyqtSignal()
     foregroundSignal = QtCore.pyqtSignal()
@@ -76,7 +377,8 @@ class atThread(QtCore.QThread):
         #win32gui.ShowWindow(parentWH,win32con.SW_RESTORE)
         #need to initialize firstly in sub thread. set the api tool to the foreground, emit signal to let main thread make the api tool to foreground.
         self.foregroundSignal.emit()
-        time.sleep(3)
+        # for simple, just sleep to wait, but better to use signal to notify sub thread 
+        time.sleep(6)
         #win32gui.SetWindowPos(parentWH, win32con.HWND_TOPMOST, 0,0,0,0, win32con.SWP_NOMOVE | win32con.SWP_NOACTIVATE| win32con.SWP_NOOWNERZORDER|win32con.SWP_SHOWWINDOW)
         rect = win32gui.GetWindowRect(subWH)
         x = rect[0]
@@ -100,7 +402,7 @@ class atThread(QtCore.QThread):
         p = psutil.Process(apiToolPid)
         #print "subprocess id is %d" % apiToolPid
         while True:
-            percentage = p.cpu_percent(interval=1.0)
+            percentage = abs(p.cpu_percent(interval=1.0))
             print "the cpu percentage is %f" % percentage
             if percentage > 5:
                 #print r"the cpu percentage is more than 10%"
@@ -120,7 +422,7 @@ class atThread(QtCore.QThread):
         
     def run(self):
         time.sleep(10)
-        os.chdir(os.path.dirname(self.apiReportToolDirecotry))
+        #os.chdir(os.path.dirname(self.apiReportToolDirecotry))
         Mhandle = win32gui.FindWindow("TkTopLevel", r"SAT 400UE API Report Tool")
         #print "%x" % (Mhandle) 
         #set the window to the top level
@@ -191,45 +493,64 @@ class atThread(QtCore.QThread):
         # if api and itemName is empty, only generate the general report, else both report 
         if self.api != "" and self.itemName != "":
             #generate specific report, all edits will be filled
-            self.moveMouseAndClick(Mhandle,sectorIdHandle)
-            time.sleep(2)
-            autopy.key.type_string(self.sectorId)
-            
-            self.moveMouseAndClick(Mhandle,carrierIdHandle)
-            time.sleep(2)
-            autopy.key.type_string(self.carrierId)
-            
             self.moveMouseAndClick(Mhandle,apiIdHandle)
             time.sleep(2)
             autopy.key.type_string(self.api)
-            
+             
             self.moveMouseAndClick(Mhandle,itemNameHandle)
             time.sleep(2)
             autopy.key.type_string(self.itemName)
-            
-            self.moveMouseAndClick(Mhandle,specificReportHandle)
-            time.sleep(3)
-            self.judgeTheCpuUsageRate(self.apiReportToolDirecotry)
-            
-            self.moveMouseAndClick(Mhandle,generalReportHandle)
-            time.sleep(3)
-            self.judgeTheCpuUsageRate(self.apiReportToolDirecotry)
+
+            self.sectorId = str(self.sectorId).strip()
+            self.carrierId = str(self.carrierId).strip()
+            sectorList = self.sectorId.split(',')
+            carrierList = self.carrierId.split(',')            
+            for i in range(len(sectorList)):
+                self.moveMouseAndClick(Mhandle,sectorIdHandle)
+                autopy.mouse.click()
+                autopy.key.tap(autopy.key.K_DELETE)
+                time.sleep(2)
+                autopy.key.type_string(sectorList[i])
+                    
+                self.moveMouseAndClick(Mhandle,carrierIdHandle)
+                autopy.mouse.click()
+                autopy.key.tap(autopy.key.K_DELETE)
+                time.sleep(2)
+                autopy.key.type_string(carrierList[i])
+                
+                self.moveMouseAndClick(Mhandle,specificReportHandle)
+                time.sleep(3)
+                self.judgeTheCpuUsageRate(self.apiReportToolDirecotry)
+                
+                self.moveMouseAndClick(Mhandle,generalReportHandle)
+                time.sleep(3)
+                self.judgeTheCpuUsageRate(self.apiReportToolDirecotry)
             self.finishSignal.emit()
             
         else: #only general report needed
-            self.moveMouseAndClick(Mhandle,sectorIdHandle)
-            time.sleep(2)
-            autopy.key.type_string(self.sectorId)
+            self.sectorId = str(self.sectorId).strip()
+            self.carrierId = str(self.carrierId).strip()
+            sectorList = self.sectorId.split(',')
+            carrierList = self.carrierId.split(',')
+            for i in range(len(sectorList)):             
+                self.moveMouseAndClick(Mhandle,sectorIdHandle)
+                autopy.mouse.click()
+                autopy.key.tap(autopy.key.K_DELETE)
+                time.sleep(2)
+                autopy.key.type_string(sectorList[i])
             
-            self.moveMouseAndClick(Mhandle,carrierIdHandle)
-            time.sleep(2)
-            autopy.key.type_string(self.carrierId)
+                self.moveMouseAndClick(Mhandle,carrierIdHandle)
+                autopy.mouse.click()
+                autopy.key.tap(autopy.key.K_DELETE)
+                time.sleep(2)
+                autopy.key.type_string(carrierList[i])
             
-            self.moveMouseAndClick(Mhandle,generalReportHandle)
-            time.sleep(4)
-            self.judgeTheCpuUsageRate(self.apiReportToolDirecotry)
+                self.moveMouseAndClick(Mhandle,generalReportHandle)
+                time.sleep(4)
+                self.judgeTheCpuUsageRate(self.apiReportToolDirecotry)
             self.finishSignal.emit()
-        
+
+#Class used to Kill processes        
 class killProcessThread(QtCore.QThread):
     finishSignal = QtCore.pyqtSignal(list)
     finishSignalForAt = QtCore.pyqtSignal()
@@ -245,7 +566,7 @@ class killProcessThread(QtCore.QThread):
     
     def run(self):
         global akButtonClicked
-        
+        self.processList = []
         currentTime = datetime.now()
         #print currentTime
         # add judgement here to sure the end time is ahead of the current time 
@@ -269,6 +590,7 @@ class killProcessThread(QtCore.QThread):
             self.finishSignal.emit(self.processList)
             self.finishSignalForAt.emit()
 
+#Main Class
 class killer(QDialog, Ui_akat):
     """
     Class documentation goes here.
@@ -276,6 +598,7 @@ class killer(QDialog, Ui_akat):
     paraForSubThread = QtCore.pyqtSignal(datetime, str)
     paraForAtThread = QtCore.pyqtSignal(list)
     paraForStartApiToolThread = QtCore.pyqtSignal(str)
+    paraForCopyThread = QtCore.pyqtSignal(str,str,  str, str)
     def __init__(self, parent=None):
         """
         Constructor
@@ -284,16 +607,20 @@ class killer(QDialog, Ui_akat):
         """
         QDialog.__init__(self, parent)
         self.setupUi(self)
-        self.setFixedSize(820, 458)
+        self.setFixedSize(820, 600)
         self.kThread = killProcessThread()
         self.aThread = atThread()
         self.apiThread = startApiReportToolThread()
+        self.copyThread = copyDataAndGraphThread()
         
         self.aThread.finishSignal.connect(self.atThreadFinished)
         self.aThread.foregroundSignal.connect(self.makeForeGround)
         self.kThread.finishSignal.connect(self.subThreadWorkEndAll)
         self.kThread.finishSignalForAt.connect(self.akFinishedToStartAT)
+        self.copyThread.copyFinishSignal.connect(self.copyThreadFinished)
         self.paraForSubThread.connect(self.kThread.initValues)
+        
+        self.paraForCopyThread.connect(self.copyThread.initValues)
         
         self.paraForAtThread.connect(self.aThread.initValues)
         self.paraForStartApiToolThread.connect(self.apiThread.initValues)
@@ -411,7 +738,7 @@ class killer(QDialog, Ui_akat):
         apiReportToolDirectory =str(self.lineEdit_apiReportToolDirectory.text())
         #apiReportToolDirectory = str(apiReportToolDirectory)
         if startN=='' or endN =='' or carrierId =='' or sectorId=='' or mmtDirectory=='' or apiReportToolDirectory =='':
-            QtGui.QMessageBox.information(self, "INFO", 'Must fill all Line edit expect the api and itemName!!')
+            QtGui.QMessageBox.information(self, "INFO", 'Must fill all Line edit except the api and itemName!!')
             return
         else:
             self.pushButton_akatStart.setDisabled(True)
@@ -499,15 +826,40 @@ class killer(QDialog, Ui_akat):
         
     def atThreadFinished(self):
         '''
-        after decode thread finished, the main thread will kill the api report tool
+        after decode thread finished, the main thread will kill the api report tool, and if check button 'copy' checked, will start the copy thread
         '''
         cmd = 'taskkill /F /IM %s' % (os.path.basename(str(self.lineEdit_apiReportToolDirectory.text())))
         #print cmd
         time.sleep(1)
         os.system(cmd)
+        #set all button enabled
         self.pushButton_akatStart.setDisabled(False)
         self.pushButton_stop.setDisabled(False)
         self.pushButton_start.setDisabled(False)
+        if self.checkBox.isChecked():
+            #disable the copy button, after finished copy, need to enable it
+            self.startCopyAndGraph()
+            
+    def startCopyAndGraph(self):
+        self.pushButton_copyStart.setDisabled(True)
+        #initialize the value
+        mmtDirectory = self.lineEdit_mmtDirectory.text()
+        convertedMmtDirectory = os.path.join(str(mmtDirectory),'convertedMMT')
+        targetFile = str(self.lineEdit_targetGraphFile.text())
+        Cellid = str(self.lineEdit_sourceFileId.text())
+        graphname = str(self.lineEdit_graphName.text())   
+        self.paraForCopyThread.emit(convertedMmtDirectory, targetFile, graphname,Cellid)
+        time.sleep(1)
+        self.copyThread.run()
+    
+    @pyqtSignature("")
+    def on_pushButton_copyStart_clicked(self):
+        """
+        Slot documentation goes here.
+        """
+        # after click the copy button, call the startCopyAndGraph function
+        self.startCopyAndGraph()
+        
     @pyqtSignature("")    
     def on_pushButton_akatStop_clicked(self):
         if self.kThread.isRunning():
@@ -525,6 +877,11 @@ class killer(QDialog, Ui_akat):
         shell = win32com.client.Dispatch("WScript.Shell")
         shell.SendKeys('%')
         win32gui.SetForegroundWindow(Mhandle)
+    # when copy thread work end, enable the copy button and show a msg window
+    def copyThreadFinished(self):
+        self.pushButton_copyStart.setDisabled(False)
+        QtGui.QMessageBox.information(self, "INFO", 'Copy and Graph Finished')
+        print "Copy and generate Graph Successful"
         
 if __name__ == "__main__":
     import sys

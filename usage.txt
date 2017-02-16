@@ -9,3 +9,5 @@ How to use:
 4. from and to, are the mmt numbers you want to decode
 5. "api report tool dir" should include the exe file
 6. remain fileds following your requirements 
+7. if you want to copy the specified excel to the target file after convertion completed, you need to check the 'check box' named 'copy' and specify the excel including the .xlsm, and set the cell id and graph name
+8. if you just want to copy it, need to fill the MMT directory same as step3, and set the target excel file provided by DCM, including the .xlsm, and set the cellID, the graph name, then click the button 'Copy Start'
